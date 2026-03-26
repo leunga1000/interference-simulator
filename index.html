@@ -1,0 +1,148 @@
+<html>
+    Hi
+
+            <canvas id="myCanvas" width="200" height="100" style="border:1px solid black;">
+</canvas>
+
+    <script> 
+        console.log("hello");
+
+
+
+const canvas = document.getElementById("myCanvas");
+const ctx = canvas.getContext("2d");
+ctx.fillStyle = "red";
+ctx.fillRect(0, 0, 150, 75);
+
+ctx.beginPath();
+ctx.arc(95, 50, 40, 0, 2 * Math.PI);  // x, y, radius, startAngle, endAngle, counterclockwise
+ctx.stroke();
+
+// Complete steps.
+// Set up simulation
+// draw parallel and circular lines, specify sources and wattage and wavelength, and velocity (maybe later add circling/orbit path), start/delay/offset time
+// simulation saving - localstorage and url.
+// Simulate - timesteps. Stop when moving sources out of scope + 5?
+// Calculate
+// Sum beam contributions over quantised area
+// Paint Canvas (/svg/processing)
+// paint all
+// paint only interference paths/sources
+// (export movie...)
+// (absorption) descope
+// (reflection) descope
+// does interference region (e.g. squeezed region) block/attenuate waves? unsure
+
+// specify circular source
+
+// specify linear source
+let SOURCE_COUNT = 0;
+
+function create_source(x, y, type_, wavelength, power) {
+    const source_pos = {x: 0, y: 0}; //, z: 0};
+    const source_type = 'l'; // or 'r'
+    if (power) {
+        power = power;
+    } else if (source_type === 'l') {
+        power = 7;
+    } else if (source_type === 'r') {
+        power = 3;
+    }
+    let amplitude = power ^ 0.5;
+    let waves = [];
+    wavelength = wavelength || 0.15;
+    let num_waves = 10;
+    for (let i = 0; i<=num_waves; i++) {
+        waves.push({distance: i*wavelength});
+    }
+    console.log(waves);
+    let offstage = true; // whether to keep simulating within x (2?) times simulation area.
+    SOURCE_COUNT += 1;  // thread safety?
+    const source = {pos: source_pos, type_: source_type, power: power, amplitude: amplitude, waves: waves, id: SOURCE_COUNT}
+    return source
+}
+
+function _roundNumber(number, digits) {  // from SO
+            var multiple = Math.pow(10, digits);
+            var rndedNum = Math.round(number * multiple) / multiple;
+            return rndedNum;
+        }
+
+function _assign_wave_segment(x, y, amplitude, grid, source_wave_id) {
+  // check bounds
+  //if (x < 0 || y < 0 ) {
+  //  return;  // todo test this.
+  //}
+  //let xr = _roundNumber(x, 2);  // x.toPrecision(2); sigfigs
+  //let yr = _roundNumber(y, 2);
+
+  let gl = get_grid_location(grid, x, y);
+  if (gl === false) { // not in grid scope
+    return;
+  }
+  let xr = gl[0];
+  let yr = gl[1];
+  let _grid = grid.grid;
+// if (grid[xr] === undefined || grid[xr][yr] === undefined) { 
+  //if ( !(xr in grid) || !(yr in grid[xr])) { 
+  if ( _grid.indexOf(xr) === -1) {
+    _grid[xr] = [];
+  } 
+  if ( _grid[xr].indexOf(yr) === -1) { 
+    _grid[xr][yr] = [];
+  }
+  _grid[xr][yr].push(amplitude, source_wave_id);
+
+}
+
+function make_grid(grid_increment, x_max, y_max) {
+    grid_increment = grid_increment || 1.0;
+    return {grid: [], grid_inc: grid_increment, grid_xmax: x_max, grid_ymax: y_max}
+}
+
+function get_grid_location(grid, x, y) {
+    console.log(grid);
+    grid_inc = grid.grid_inc;
+    if (x < 0 || y < 0) {
+        return false;
+    }
+    if (x > grid['grid_xmax'] || y > grid['grid_ymax']) {
+        return false;
+    }
+    const loc_x = x / grid_inc;
+    const loc_y = y / grid_inc;
+    return [loc_x, loc_y]
+}
+
+
+// Test grid
+let g = make_grid(1, 20, 10);
+let gl = get_grid_location(g, 0, 0);
+// [0,0] // console.log(gl);
+let gl2 = get_grid_location(g, 2, 2);
+// [2, 2] // console.log(gl2);
+let gl3 = get_grid_location(g, 200, 200);
+// false // console.log(gl3); // [2, 2] // console.log(gl2);
+let gl4 = get_grid_location(g, 0, -2);
+// false// console.log(gl4); // [2, 2] // console.log(gl2);
+
+function assign_source_waves(source, grid) {
+  // wait! if you have the coordinates of one wave segment then 
+  // it's easy to predict the coordinates for other waves.
+  // go upwards in distance so you can put attenuation in if necessary.
+
+  // this does mean it scales up as the square for circular sources. but
+  // you would save on the linear sources.
+  let x = 1;
+  let y = 3;
+  let wave_id = 1;
+  let source_wave_id = source.id + wave_id;
+  _assign_wave_segment(x, y, source.amplitude, grid, source_wave_id);
+}
+    let source1 = create_source();
+    console.log(source1);
+    let grid1 = make_grid(1, 20, 10);
+    assign_source_waves(source1, grid1);
+    console.log(grid1);
+    </script>
+</html>
