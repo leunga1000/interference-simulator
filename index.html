@@ -18,16 +18,18 @@ ctx.beginPath();
 ctx.arc(95, 50, 40, 0, 2 * Math.PI);  // x, y, radius, startAngle, endAngle, counterclockwise
 ctx.stroke();
 
-// Complete steps.
+// Task List:
 // Set up simulation
-// draw parallel and circular lines, specify sources and wattage and wavelength, and velocity (maybe later add circling/orbit path), start/delay/offset time
+// draw parallel and circular lines, allow specify sources and wattage and wavelength, and velocity (maybe later add circling/orbit path), start/delay/offset time
 // simulation saving - localstorage and url.
 // Simulate - timesteps. Stop when moving sources out of scope + 5?
 // Calculate
-// Sum beam contributions over quantised area
-// Paint Canvas (/svg/processing)
-// paint all
-// paint only interference paths/sources
+//  update source positions
+//  update waves
+//  Sum beam contributions over quantised area
+//  Paint Canvas (/svg/processing) <-- 
+//      paint all
+//      paint only interference paths/sources
 // (export movie...)
 // (absorption) descope
 // (reflection) descope
@@ -40,7 +42,7 @@ let SOURCE_COUNT = 0;
 
 function create_source(x, y, type_, wavelength, power) {
     const source_pos = {x: 0, y: 0}; //, z: 0};
-    const source_type = 'l'; // or 'r'
+    const source_type = 'l'; // or 'r' linear/radial
     if (power) {
         power = power;
     } else if (source_type === 'l') {
@@ -48,7 +50,7 @@ function create_source(x, y, type_, wavelength, power) {
     } else if (source_type === 'r') {
         power = 3;
     }
-    let amplitude = power ^ 0.5;
+    let amplitude = power ** 0.5;  // whoops ^
     let waves = [];
     wavelength = wavelength || 0.15;
     let num_waves = 10;
@@ -85,19 +87,64 @@ function _assign_wave_segment(x, y, amplitude, grid, source_wave_id) {
   let _grid = grid.grid;
 // if (grid[xr] === undefined || grid[xr][yr] === undefined) { 
   //if ( !(xr in grid) || !(yr in grid[xr])) { 
-  if ( _grid.indexOf(xr) === -1) {
-    _grid[xr] = [];
+  // if ( _grid.indexOf(xr) === -1) {
+  if ( !_grid.hasOwnProperty(xr) ) {  // hasOwn
+    _grid[xr] = {};  // use objects as array looks like is allocated anyway (but might not be?) could be Optimisation point
   } 
-  if ( _grid[xr].indexOf(yr) === -1) { 
-    _grid[xr][yr] = [];
+  // if ( _grid[xr].indexOf(yr) === -1) { 
+  if ( !_grid[xr].hasOwnProperty(yr) ) { 
+    _grid[xr][yr] = {};
   }
-  _grid[xr][yr].push(amplitude, source_wave_id);
+
+  if (!_grid[xr][yr].hasOwnProperty(source_wave_id) ) {
+    _grid[xr][yr][source_wave_id] = amplitude;
+  }
 
 }
 
 function make_grid(grid_increment, x_max, y_max) {
     grid_increment = grid_increment || 1.0;
-    return {grid: [], grid_inc: grid_increment, grid_xmax: x_max, grid_ymax: y_max}
+    const grid_xmax = x_max / grid_increment;
+    const grid_ymax = y_max / grid_increment;
+    return {// grid: [], 
+            grid: {}, 
+            grid_inc: grid_increment, grid_xmax: grid_xmax, grid_ymax: grid_ymax, x_max: x_max, y_max: y_max}
+}
+
+function paint_sum(grid, prop_x, prop_y, sum) {
+    console.assert(`painting ${prop_x}, ${prop_y}, ${sum}` === 'painting 1, 3, 7.000000000000001'); // TODO
+    console.log(`painting ${prop_x}, ${prop_y}, ${sum}`);
+}
+
+function _total_up_grid(grid, linear_or_squares) {
+    let grid_data = grid.grid;
+    for (const prop_x in grid_data) {
+        for (const prop_y in grid_data[prop_x] ) {
+            let data_point = grid_data[prop_x][prop_y];
+            let sum = 0;
+            let root_sum = 0;
+            console.log(data_point);
+            for (const source_wave_id in data_point) {
+                if (source_wave_id === 'sum') {
+                    continue;
+                }
+                let contribution = data_point[source_wave_id];
+                console.log("contribution" + contribution);
+                if (linear_or_squares === 'lin') {
+                    sum += contribution;
+                } else {
+                    root_sum += contribution; // OPT memoise
+                }
+            }
+
+            if (linear_or_squares === 'sq') {
+                sum = root_sum ** 2;
+                console.log(`${root_sum}, ${sum}`);
+            }
+            grid_data[prop_x][prop_y]['sum'] = sum;
+            paint_sum(grid, prop_x, prop_y, sum);
+        }
+    }
 }
 
 function get_grid_location(grid, x, y) {
@@ -118,12 +165,22 @@ function get_grid_location(grid, x, y) {
 // Test grid
 let g = make_grid(1, 20, 10);
 let gl = get_grid_location(g, 0, 0);
+console.assert(gl[0] === 0);
+console.assert(gl[1] === 0);
+
 // [0,0] // console.log(gl);
 let gl2 = get_grid_location(g, 2, 2);
+console.assert(gl2[0] === 2);
+console.assert(gl2[1] === 2);
 // [2, 2] // console.log(gl2);
+
+// TODO test with grid lengthscale not 1
+
 let gl3 = get_grid_location(g, 200, 200);
+console.assert(gl3 === false);
 // false // console.log(gl3); // [2, 2] // console.log(gl2);
 let gl4 = get_grid_location(g, 0, -2);
+console.assert(gl4 === false);
 // false// console.log(gl4); // [2, 2] // console.log(gl2);
 
 function assign_source_waves(source, grid) {
@@ -136,13 +193,18 @@ function assign_source_waves(source, grid) {
   let x = 1;
   let y = 3;
   let wave_id = 1;
-  let source_wave_id = source.id + wave_id;
+  let source_wave_id =  `${source.id},${wave_id}`;
   _assign_wave_segment(x, y, source.amplitude, grid, source_wave_id);
 }
     let source1 = create_source();
     console.log(source1);
     let grid1 = make_grid(1, 20, 10);
     assign_source_waves(source1, grid1);
+    _total_up_grid(grid1, 'sq')
     console.log(grid1);
+    let test = {};
+    test["a"] = 3;
+    test[1] = 4;
+    console.log(test);
     </script>
 </html>
