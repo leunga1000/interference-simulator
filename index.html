@@ -1,13 +1,22 @@
 <html>
-    Hi
+    Hi. This is a web page showing how demonstrating how phone signals can interfere with each other constructively.
+
+    
 
             <canvas id="myCanvas" width="200" height="100" style="border:1px solid black;">
 </canvas>
+<br />
+<a href=qanda.html>Q & A</a>
+<br />
 
+<textarea id="log"></textarea>
     <script> 
         console.log("hello");
 
-
+function log(text) {
+    document.getElementById("log").append(text);
+}
+log("hello");
 
 const canvas = document.getElementById("myCanvas");
 const ctx = canvas.getContext("2d");
@@ -17,6 +26,18 @@ ctx.fillRect(0, 0, 150, 75);
 ctx.beginPath();
 ctx.arc(95, 50, 40, 0, 2 * Math.PI);  // x, y, radius, startAngle, endAngle, counterclockwise
 ctx.stroke();
+
+const canvas2 = document.createElement("canvas"); 
+canvas2.width = 200;
+canvas2.height = 100;
+document.body.appendChild(canvas2);
+const ctx2 = canvas2.getContext("2d");
+ctx2.fillStyle = "red";
+// ctx2.fillRect(0, 0, 150, 75); // xmin ymin xmax ymax
+
+ctx2.beginPath();
+ctx2.arc(95, 50, 40, 0, 2 * Math.PI);  // x, y, radius, startAngle, endAngle, counterclockwise
+ctx2.stroke();
 
 // Task List:
 // Set up simulation
@@ -30,6 +51,21 @@ ctx.stroke();
 //  Paint Canvas (/svg/processing) <-- 
 //      paint all
 //      paint only interference paths/sources
+//      TODO render multiple virtual canvases, then use:
+//          domContext.drawImage(canvas, 0, 0, 200, 200);
+//          domContext.drawImage(canvas2, 0, 0, 200, 200);
+//          to render the layers as you need.
+//      side by side all and sum canvasses
+//      paint source **
+// Specify source path.
+//      specify a path
+//          specify a straight path
+//          specify a curved path/turn
+//      specify turns and straight paths to form a path.
+//      "go forward at 30 mph and turn left at junction"
+//      "go forward 30 mph and continue straight on at junction"
+// Save sums to local storage
+// include amplitude "up" and "down" waves
 // (export movie...)
 // (absorption) descope
 // (reflection) descope
@@ -40,9 +76,13 @@ ctx.stroke();
 // specify linear source
 let SOURCE_COUNT = 0;
 
-function create_source(x, y, type_, wavelength, power) {
-    const source_pos = {x: 0, y: 0}; //, z: 0};
-    const source_type = 'l'; // or 'r' linear/radial
+// function method_test2(x) {
+//   return this.xy;
+// }
+
+function create_source(x, y, source_type_in, wavelength, power) {
+    const source_pos = {x: x, y: y}; //, z: 0};
+    const source_type = source_type_in || 'l'; // or 'r' linear/radial
     if (power) {
         power = power;
     } else if (source_type === 'l') {
@@ -50,18 +90,56 @@ function create_source(x, y, type_, wavelength, power) {
     } else if (source_type === 'r') {
         power = 3;
     }
-    let amplitude = power ** 0.5;  // whoops ^
+    let amplitude = power ** 0.5;  // not ^
     let waves = [];
     wavelength = wavelength || 0.15;
-    let num_waves = 10;
-    for (let i = 0; i<=num_waves; i++) {
-        waves.push({distance: i*wavelength});
-    }
-    console.log(waves);
+    // let num_waves = 10;
+    // for (let i = 0; i<=num_waves; i++) {
+    //     waves.push({distance: i*wavelength});
+    // }
+    // console.log(waves);
     let offstage = true; // whether to keep simulating within x (2?) times simulation area.
     SOURCE_COUNT += 1;  // thread safety?
-    const source = {pos: source_pos, type_: source_type, power: power, amplitude: amplitude, waves: waves, id: SOURCE_COUNT}
+    const source = {pos: source_pos, 
+                    source_type: source_type, wavelength: wavelength, 
+                    power: power, amplitude: amplitude, id: SOURCE_COUNT}
     return source
+}
+
+function get_num_waves(source, grid) {
+    // calculate number of waves to put in the
+    // simulation from this source.
+    //console.log(source);
+    const pos = source.pos;
+    let bounds = [[0,0], [0, grid.y_max], [grid.x_max, 0], [grid.x_max, grid.y_max]];
+    let max_distance = 0.0;
+    let min_distance = 0.0;
+    for (let bound of bounds) {
+        //console.log(bound[0], bound[1], pos.x, pos.y);
+        let distance = ((pos.x - bound[0]) ** 2 + (pos.y - bound[1]) ** 2) ** 0.5;
+        //console.log(bound, distance, max_distance);
+        max_distance = Math.max(distance, max_distance, source.wavelength);
+        min_distance = Math.min(distance, min_distance, source.wavelength);
+    }
+    return {min: Math.floor(min_distance / source.wavelength),
+            max: Math.ceil(max_distance / source.wavelength)};  // +1?
+
+    // TODO think this is right for radial, should cover linear with a bit of tweaking
+}
+
+function test_get_num_waves() {
+    // let source = create_source( 1, 3, 'l', 0.1, 2);
+    // let grid = make_grid(0.05, 20, 30);
+
+    let source = create_source( x=0, y=0, 'r', wavelength=0.1, power=2);
+    let grid = make_grid(1, 4, 5);
+    let res = get_num_waves(source, grid);
+    console.assert(res.max === 65);
+    console.log(res.max, 65);
+    if (res.max === 65) {
+        console.log("test_get_num_waves ok");
+    }
+    log(`min is ${res.min}`);
 }
 
 function _roundNumber(number, digits) {  // from SO
@@ -102,18 +180,54 @@ function _assign_wave_segment(x, y, amplitude, grid, source_wave_id) {
 
 }
 
-function make_grid(grid_increment, x_max, y_max) {
+function make_grid(grid_increment, x_max, y_max, ctx, ctxSum, scale=1) {
     grid_increment = grid_increment || 1.0;
-    const grid_xmax = x_max / grid_increment;
-    const grid_ymax = y_max / grid_increment;
+    const grid_index_xmax = x_max / grid_increment;
+    const grid_index_ymax = y_max / grid_increment;
     return {// grid: [], 
             grid: {}, 
-            grid_inc: grid_increment, grid_xmax: grid_xmax, grid_ymax: grid_ymax, x_max: x_max, y_max: y_max}
+            grid_inc: grid_increment, grid_index_xmax: grid_index_xmax, grid_index_ymax: grid_index_ymax, 
+            x_max: x_max, y_max: y_max,
+            ctx: ctx, ctxSum,
+            scale: scale}
 }
 
+// TODO DELETE
+// function get_grid_scale(grid, canvas) {
+//     let x_scale = canvas.width / grid.x_max;
+//     let y_scale = canvas.height / grid.y_max;
+//     return {x_scale: x_scale, y_scale: y_scale}
+// }
+
 function paint_sum(grid, prop_x, prop_y, sum) {
-    console.assert(`painting ${prop_x}, ${prop_y}, ${sum}` === 'painting 1, 3, 7.000000000000001'); // TODO
-    console.log(`painting ${prop_x}, ${prop_y}, ${sum}`);
+    let threshold = 10.1;
+    //console.assert(`painting ${prop_x}, ${prop_y}, ${sum}` === 'painting 1, 3, 7.000000000000001'); // TODO
+    
+    // if (!grid.canvas) {
+    //     grid.canvas = canvas2;
+    // }
+
+    // upper left x upper left y, width px, height px
+    let x0 = prop_x * grid.grid_inc;
+    let y0 = grid.y_max - ((prop_y * grid.grid_inc) - grid.grid_inc);  // position of grid cell, minus grid cell height (y is downwards), then ymax subtract that
+    // let grid_scale = get_grid_scale(grid, grid.canvas);
+    // let xs = x0 * grid_scale.x_scale;
+    // let ys = y0 * grid_scale.y_scale;
+    let xs = x0 * grid.scale;
+    let ys = y0 * grid.scale;
+    let width = grid.grid_inc * grid.scale; //TODO optimise
+    let height = grid.grid_inc * grid.scale;
+
+    if (sum > threshold) {
+        // console.log(`painting ${prop_x}, ${prop_y}, ${sum}, ${grid.grid_inc}`);
+        console.log(`painting ${x0}, ${y0}, ${sum}, ${grid.grid_inc}, ${width}, ${height}, ${xs}, ${ys}, ${grid.scale}`);
+        // ctx2.fillRect(xs, ys, width, height); // upper left x upper left y, width px, height px
+        grid.ctx.fillRect(xs, ys, width, height); // upper left x upper left y, width px, height px
+        if (grid.ctxSum) {
+            grid.ctxSum.fillRect(xs, ys, width, height);
+        }
+        // ctx2.fillRect(0, 0, prop_x * grid.grid_inc, prop_y * grid.grid_inc); // xmin ymin xmax ymax
+    }
 }
 
 function _total_up_grid(grid, linear_or_squares) {
@@ -145,19 +259,20 @@ function _total_up_grid(grid, linear_or_squares) {
             paint_sum(grid, prop_x, prop_y, sum);
         }
     }
+    console.log(grid);
 }
 
 function get_grid_location(grid, x, y) {
-    console.log(grid);
+    // console.log(grid);
     grid_inc = grid.grid_inc;
     if (x < 0 || y < 0) {
         return false;
     }
-    if (x > grid['grid_xmax'] || y > grid['grid_ymax']) {
+    if (x > grid['grid_index_xmax'] || y > grid['grid_index_ymax']) {
         return false;
     }
-    const loc_x = x / grid_inc;
-    const loc_y = y / grid_inc;
+    const loc_x = Math.floor(x / grid_inc);
+    const loc_y = Math.floor(y / grid_inc);
     return [loc_x, loc_y]
 }
 
@@ -183,6 +298,69 @@ let gl4 = get_grid_location(g, 0, -2);
 console.assert(gl4 === false);
 // false// console.log(gl4); // [2, 2] // console.log(gl2);
 
+
+function test_assign_wave_segment() {
+  let source = create_source(0, 0, 'r', 0.15, 10);
+  // console.log(source1);
+  let grid = make_grid(1, 20, 10, ctx);
+  // assign_source_waves(source1, grid1);
+
+  let x = 1;
+  let y = 3;
+  let wave_id = 1;
+  let source_wave_id =  `${source.id},${wave_id}`;
+  _assign_wave_segment(x, y, source.amplitude, grid, source_wave_id);
+  console.log("testing assign_wave_segment");
+  console.log(grid);
+  console.log(grid.grid[1][3]);
+  console.assert(grid.grid[1][3]["1,1"] === 3.1622776601683795);
+  //console.assert(`painting ${prop_x}, ${prop_y}, ${sum}` === 'painting 1, 3, 7.000000000000001'); // TODO
+  _total_up_grid(grid, linear_or_squares="sq");
+  console.log(grid.grid[1][3]);
+  console.log(grid);
+  console.log(grid.grid[1][3]["sum"]);
+  console.assert(Math.floor(grid.grid[1][3]["sum"]) === 10);
+  console.log("finish test assign_wave_segment");
+}
+test_assign_wave_segment();
+
+function _assign_wave(wave_id, source, grid, source_wave_id) {
+    // given a wave description, break it into 
+    // segments and assign
+    let radius = wave_id * source.wavelength;
+    let circumference = 2 * Math.PI * radius;
+    let num_segments = circumference / grid.grid_inc;  // TODO does it need to be less than grid_inc?
+    // let angle_increment = 360 / num_segments;
+    let angle_increment = 2 * Math.PI / num_segments;
+    let angle = 0; // vertical upwards
+    for (let i_angle = 0; i_angle <= num_segments; i_angle++) {
+        // x, sin theta = o / h  where o is what we're looking for, h is radius.
+        // x = h * sin theta
+        // x = r * sin theta
+        let theta = i_angle * angle_increment;
+        let x = radius * Math.sin(theta);
+        x = x + source.pos.x;
+        // console.log(x);
+        // y, cos theta = a / h where a is our y coordinate, h is radius
+        // y = r * cos theta
+        let y = radius * Math.cos(theta);
+        y = source.pos.y + y;
+        // console.log(x, y, i_angle, theta, radius, Math.sin(theta), Math.cos(theta));
+        _assign_wave_segment(x, y, source.amplitude, grid, source_wave_id);
+    }
+    
+}
+function test_assign_wave() {
+    let source = create_source(0, 0, 'r', 0.15, 10);
+    // console.log(source1);
+    let grid = make_grid(1, 20, 10);
+    let wave_id = 1;
+    let source_wave_id =  `${source.id},${wave_id}`;
+    _assign_wave(wave_id, source, grid, source_wave_id);
+
+}
+test_assign_wave();
+
 function assign_source_waves(source, grid) {
   // wait! if you have the coordinates of one wave segment then 
   // it's easy to predict the coordinates for other waves.
@@ -190,21 +368,110 @@ function assign_source_waves(source, grid) {
 
   // this does mean it scales up as the square for circular sources. but
   // you would save on the linear sources.
-  let x = 1;
-  let y = 3;
-  let wave_id = 1;
-  let source_wave_id =  `${source.id},${wave_id}`;
-  _assign_wave_segment(x, y, source.amplitude, grid, source_wave_id);
+
+  let num_waves = get_num_waves(source, grid);
+  let min_waves = num_waves.min || 1;
+  
+  console.log('assign source waves, num_waves', num_waves);
+  for (let wave_id = min_waves; wave_id <= num_waves.max; wave_id++) {
+    console.log(wave_id);
+    let source_wave_id =  `${source.id},${wave_id}`;
+    _assign_wave(wave_id, source, grid, source_wave_id);
+    // _assign_wave_segment(x, y, source.amplitude, grid, source_wave_id);
+    paint_wave(wave_id, source, grid, source_wave_id);
+  }
 }
-    let source1 = create_source();
+
+function paint_wave(wave_id, source, grid, source_wave_id) {
+    let ctx = grid.ctx;
+    ctx.beginPath();
+    
+    
+// ctx2.arc(95, 50, 40, 0, 2 * Math.PI);  // x, y, radius, startAngle, endAngle, counterclockwise
+let x = source.pos.x * grid.scale;
+let y = ( grid.y_max - source.pos.y ) * grid.scale;
+let radius = wave_id * source.wavelength * grid.scale;
+ctx.arc(x, y, radius=radius, startAngle=0, endAngle=2 * Math.PI);  // x, y, radius, startAngle, endAngle, counterclockwise
+//ctx2.fillStyle="rgba(0, 0, 200, 0)";
+//ctx2.fillStyle="red";
+ctx.stroke();
+
+
+}
+function paint_grid(grid, ctx) {
+    // let ctx = grid.ctx;
+    ctx.beginPath();
+    ctx.rect(0, 0, grid.x_max * grid.scale, grid.y_max * grid.scale);
+    ctx.fillStyle = "black";
+    ctx.stroke();
+}
+
+
+function new_canvas(canvas_id) {
+    let span = document.createElement("span"); 
+    document.body.appendChild(span);
+    
+    let canvas = document.createElement("canvas"); 
+    canvas.id = canvas_id
+    canvas.width = 200;
+    canvas.height = 100;
+    
+    let canvasSum = document.createElement("canvas"); 
+    canvasSum.id = `${canvas_id}sum`;
+    canvasSum.width = 200;
+    canvasSum.height = 100;
+
+    let input1 = document.createElement("input");
+    input1.type = 'checkbox';
+    input1.name = 'checkShowEnergy';
+    input1.id = 'checkShowEnergy';
+    input1.value = "Show Energy";
+    input1.checked = true;
+    // input1.onChange =
+    span.appendChild(input1);
+    let labelShowEnergy = document.createElement("label");
+    labelShowEnergy.for = "checkShowEnergy";
+    labelShowEnergy.innerText = "Show Energy";
+    span.appendChild(labelShowEnergy);
+
+
+    document.body.appendChild(canvas);
+    document.body.appendChild(canvasSum);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "red";
+
+    const ctxSum = canvasSum.getContext("2d");
+    ctxSum.fillStyle = "red";
+
+    span.appendChild(canvas);
+    span.appendChild(canvasSum);
+    return {ctx, ctxSum};
+
+}
+    let source1 = create_source(10, 15, 'r', wavelength=1, power=10);
+    
     console.log(source1);
-    let grid1 = make_grid(1, 20, 10);
+    let grid1 = make_grid(0.05, 20, 10, ctx2, ctx2, scale=10);
     assign_source_waves(source1, grid1);
-    _total_up_grid(grid1, 'sq')
+    _total_up_grid(grid1, 'sq');
+    paint_grid(grid1, grid1.ctx);
     console.log(grid1);
+    let new_canvas1 = new_canvas();
+    let grid2 = make_grid(0.05, 20, 10, new_canvas1.ctx, new_canvas1.ctxSum, scale=10);
+    assign_source_waves(source1, grid2);
+    let source2 = create_source(15, 5, 'r', wavelength=1, power=10);
+    assign_source_waves(source2, grid2);
+    _total_up_grid(grid2, 'sq');
+    paint_grid(grid2, grid2.ctx);
+    paint_grid(grid2, grid2.ctxSum);
     let test = {};
     test["a"] = 3;
     test[1] = 4;
     console.log(test);
+    test_get_num_waves();
+    /*console.log(Math.PI);
+    console.log(3.14159)
+    console.log(2/Math.PI);
+    console.log(2/3.14159);*/
     </script>
 </html>
