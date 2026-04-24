@@ -252,12 +252,12 @@ function make_grid(grid_increment, x_max, y_max, ctx, ctxSum, timestep_interval=
 // }
 
 function paint_sum(grid, prop_x, prop_y, sum) {
-    let threshold = 10.1;
+    let threshold = 11;// 10.1;
     //console.assert(`painting ${prop_x}, ${prop_y}, ${sum}` === 'painting 1, 3, 7.000000000000001'); // TODO
     
     // upper left x upper left y, width px, height px
     let x0 = prop_x * grid.grid_inc;
-    let y0 = grid.y_max - ((prop_y * grid.grid_inc) - grid.grid_inc);  // position of grid cell, minus grid cell height (y is downwards), then ymax subtract that
+    let y0 = grid.y_max - ((prop_y * grid.grid_inc) + grid.grid_inc);  // position of grid cell, minus grid cell height (y is downwards), then ymax subtract that
     // let grid_scale = get_grid_scale(grid, grid.canvas);
     // let xs = x0 * grid_scale.x_scale;
     // let ys = y0 * grid_scale.y_scale;
@@ -265,17 +265,31 @@ function paint_sum(grid, prop_x, prop_y, sum) {
     let ys = y0 * grid.scale;
     let width = grid.grid_inc * grid.scale; //TODO optimise
     let height = grid.grid_inc * grid.scale;
-
+    let out_str = '';
     if (sum > threshold) {
         // console.log(`painting ${prop_x}, ${prop_y}, ${sum}, ${grid.grid_inc}`);
         console.log(`painting ${x0}, ${y0}, ${sum}, ${grid.grid_inc}, ${width}, ${height}, ${xs}, ${ys}, ${grid.scale}`);
         // ctx2.fillRect(xs, ys, width, height); // upper left x upper left y, width px, height px
+        grid.ctx.globalAlpha = 0.5;
+        grid.ctx.fillStyle = 'red';
+        width = Math.max(width, 1)
+        height = Math.max(height, 1)
         grid.ctx.fillRect(xs, ys, width, height); // upper left x upper left y, width px, height px
+        grid.ctx.globalAlpha = 1;
         if (grid.ctxSum) {
-            grid.ctxSum.fillRect(xs, ys, width, height);
+            //grid.ctxSum.fillRect(xs, ys, width, height);
+            grid.ctxSum.beginPath();
+            // TODO grad
+            grid.ctxSum.arc(xs, ys, 1, 0, 2 * Math.PI);
+            grid.ctxSum.stroke();
         }
         // ctx2.fillRect(0, 0, prop_x * grid.grid_inc, prop_y * grid.grid_inc); // xmin ymin xmax ymax
     }
+    else {
+        out_str = `O painting ${x0}, ${y0}, ${sum}, ${grid.grid_inc}, ${width}, ${height}, ${xs}, ${ys}, ${grid.scale}`;
+        
+    }
+    //console.log(out_str);
 }
 
 function _total_up_grid(grid, linear_or_squares) {
@@ -316,11 +330,13 @@ function get_grid_location(grid, x, y) {
     if (x < 0 || y < 0) {
         return false;
     }
-    if (x > grid['grid_index_xmax'] || y > grid['grid_index_ymax']) {
+    // if (x > grid['grid_index_xmax'] || y > grid['grid_index_ymax']) {
+    if (x > grid.x_max || y > grid.y_max) {
         return false;
     }
     const loc_x = Math.floor(x / grid_inc);
     const loc_y = Math.floor(y / grid_inc);
+    
     return [loc_x, loc_y]
 }
 
@@ -384,7 +400,8 @@ function _assign_wave(wave_id, source, grid, source_wave_id) {
     // segments and assign
     let radius = wave_id * source.wavelength;
     let circumference = 2 * Math.PI * radius;
-    let num_segments = circumference / grid.grid_inc;  // TODO does it need to be less than grid_inc?
+    let num_segments = circumference / (0.2 * grid.grid_inc);   // TODO does it need to be less than grid_inc? - YES
+    
     // let angle_increment = 360 / num_segments;
     let angle_increment = 2 * Math.PI / num_segments;
     let angle = 0; // vertical upwards
@@ -731,12 +748,12 @@ function simulate(sources, paths, grid) {
     _total_up_grid(grid2, 'sq');
     //paint_grid(grid2, grid2.ctx);
     //paint_grid(grid2, grid2.ctxSum);
-    let grid3 = make_grid(0.05, 20, 10);
+    let grid3 = make_grid(1, 20, 10);
     let source3 = create_source(5, 8, 'r', wavelength=1, power=10);
     assign_source_waves(source1, grid3);
     assign_source_waves(source2, grid3);
     assign_source_waves(source3, grid3);
-    _total_up_grid(grid3, "lin");
+    _total_up_grid(grid3, "sq");
     
     test_get_num_waves();
     // scenarios
@@ -756,7 +773,7 @@ function simulate(sources, paths, grid) {
     new_point("A", 5, 8);
     new_point("B", 15, 12);
     let source3_path = new_straight_course(x=15, y=12, speed_mph=10);
-    let grid4 = make_grid(0.05, 20, 10);
+    let grid4 = make_grid(0.01, 20, 10);
     console.log('calling simulate')
     simulate([source1, source2, source3], [null, null, source3_path], grid4);
     console.log('called simulate')
